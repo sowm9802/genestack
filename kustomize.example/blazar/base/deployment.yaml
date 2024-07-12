@@ -1,0 +1,252 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "blazar-api"
+  namespace: openstack
+  labels:
+    release_group: blazar
+    application: blazar
+    component: api
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      application: blazar
+      component: api
+      release_group: blazar
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        application: blazar
+        component: api
+        release_group: blazar
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: release_group
+                  operator: In
+                  values:
+                  - blazar
+                - key: application
+                  operator: In
+                  values:
+                  - blazar
+                - key: component
+                  operator: In
+                  values:
+                  - server
+              topologyKey: kubernetes.io/hostname
+            weight: 10
+      nodeSelector:
+        openstack-control-plane: enabled
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - name: pod-tmp
+          emptyDir: {}
+        - name: pod-etc-blazar
+          emptyDir: {}
+        - name: blazar-data
+          configMap:
+            name: "blazar-configmap"
+            defaultMode: 0555
+      initContainers:
+        - name: init
+          image: "quay.io/airshipit/kubernetes-entrypoint:v1.0.0"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: true
+            readOnlyRootFilesystem: false
+            runAsUser: 65534
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+            - name: INTERFACE_NAME
+              value: eth0
+            - name: PATH
+              value: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/
+            - name: DEPENDENCY_SERVICE
+              value: ""
+            - name: DEPENDENCY_JOBS
+              value: ""
+            - name: DEPENDENCY_DAEMONSET
+              value: ""
+            - name: DEPENDENCY_CONTAINER
+              value: ""
+            - name: DEPENDENCY_POD_JSON
+              value: ""
+            - name: DEPENDENCY_CUSTOM_RESOURCE
+              value: ""
+          command:
+            - kubernetes-entrypoint
+          volumeMounts: []
+      containers:
+      - name: blazar-api
+        image: "ghcr.io/sowm9802/blazar:1.16"
+        imagePullPolicy: IfNotPresent
+        command: ["bash", "-c"]
+        args:
+            - |
+              /tmp/blazar-conf-setup.sh &&
+              /tmp/blazar-resource-create.sh &&
+              /tmp/blazar-db-migrate.sh &&
+              /tmp/blazar-service-init.sh
+        volumeMounts:
+            - name: pod-tmp
+              mountPath: /tmp
+            - name: pod-etc-blazar
+              mountPath: /etc/blazar
+              readOnly: false
+            - name: blazar-data
+              mountPath: /tmp/blazar-conf-setup.sh
+              subPath: blazar-conf-setup.sh
+              readOnly: true
+            - name: blazar-data
+              mountPath: /tmp/blazar-resource-create.sh
+              subPath: blazar-resource-create.sh
+              readOnly: true
+            - name: blazar-data
+              mountPath: /tmp/blazar-db-migrate.sh
+              subPath: blazar-db-migrate.sh
+              readOnly: true
+            - name: blazar-data
+              mountPath: /tmp/blazar-service-init.sh
+              subPath: blazar-service-init.sh
+              readOnly: true
+        env:
+          - name: SERVICE_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: blazar-secrets
+                key: service-username
+          - name: SERVICE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: blazar-secrets
+                key: service-password
+          - name: SERVICE_DOMAIN
+            valueFrom:
+              secretKeyRef:
+                name: blazar-secrets
+                key: service-domain
+          - name: SERVICE_PROJECT
+            valueFrom:
+              secretKeyRef:
+                name: blazar-secrets
+                key: service-project
+          - name: SERVICE_PROJECT_DOMAIN
+            valueFrom:
+              secretKeyRef:
+                name: blazar-secrets
+                key: service-project-domain
+          - name: DB_ENDPOINT
+            valueFrom:
+              secretKeyRef:
+                name: blazar-secrets
+                key: db-endpoint
+          - name: DB_NAME
+            valueFrom:
+              secretKeyRef:
+                name: blazar-secrets
+                key: db-name
+          - name: DB_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: blazar-secrets
+                key: db-username
+          - name: DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: blazar-secrets
+                key: db-password
+          - name: RABBIT_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: blazar-rabbitmq-password
+                key: username
+          - name: RABBIT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: blazar-rabbitmq-password
+                key: password
+          - name: BLAZAR_KEYSTONE_ENDPOINT
+            valueFrom:
+              secretKeyRef:
+                name: blazar-secrets
+                key: keystone-endpoint
+          - name: BLAZAR_DEFAULT_REGION
+            valueFrom:
+              secretKeyRef:
+                name: blazar-secrets
+                key: default-region
+          - name: OS_IDENTITY_API_VERSION
+            value: "3"
+          - name: OS_AUTH_URL
+            valueFrom:
+              secretKeyRef:
+                name: keystone-keystone-admin
+                key: OS_AUTH_URL
+          - name: OS_REGION_NAME
+            valueFrom:
+              secretKeyRef:
+                name: keystone-keystone-admin
+                key: OS_REGION_NAME
+          - name: OS_INTERFACE
+            valueFrom:
+              secretKeyRef:
+                name: keystone-keystone-admin
+                key: OS_INTERFACE
+          - name: OS_ENDPOINT_TYPE
+            valueFrom:
+              secretKeyRef:
+                name: keystone-keystone-admin
+                key: OS_INTERFACE
+          - name: OS_PROJECT_DOMAIN_NAME
+            valueFrom:
+              secretKeyRef:
+                name: keystone-keystone-admin
+                key: OS_PROJECT_DOMAIN_NAME
+          - name: OS_PROJECT_NAME
+            valueFrom:
+              secretKeyRef:
+                name: keystone-keystone-admin
+                key: OS_PROJECT_NAME
+          - name: OS_USER_DOMAIN_NAME
+            valueFrom:
+              secretKeyRef:
+                name: keystone-keystone-admin
+                key: OS_USER_DOMAIN_NAME
+          - name: OS_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: keystone-keystone-admin
+                key: OS_USERNAME
+          - name: OS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: keystone-keystone-admin
+                key: OS_PASSWORD
+          - name: OS_DEFAULT_DOMAIN
+            valueFrom:
+              secretKeyRef:
+                name: keystone-keystone-admin
+                key: OS_DEFAULT_DOMAIN

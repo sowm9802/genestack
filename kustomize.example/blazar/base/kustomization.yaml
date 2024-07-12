@@ -1,0 +1,7 @@
+resources:
+  - blazar-mariadb-database.yaml
+  - blazar-rabbitmq-queue.yaml
+  - config-map.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml

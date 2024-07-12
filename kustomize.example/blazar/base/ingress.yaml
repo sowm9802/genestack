@@ -1,0 +1,43 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: blazar
+  namespace: openstack
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: blazar
+    http:
+      paths:
+      - backend:
+          service:
+            name: blazar-api
+            port:
+              name: b-api
+        path: /
+        pathType: ImplementationSpecific
+  - host: blazar.openstack
+    http:
+      paths:
+      - backend:
+          service:
+            name: blazar-api
+            port:
+              name: b-api
+        path: /
+        pathType: ImplementationSpecific
+  - host: blazar.openstack.svc.cluster.local
+    http:
+      paths:
+      - backend:
+          service:
+            name: blazar-api
+            port:
+              name: b-api
+        path: /
+        pathType: ImplementationSpecific
+status:
+  loadBalancer:
+    ingress:
+    - ip: 172.31.1.181
+    - ip: 172.31.1.26

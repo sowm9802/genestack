@@ -7,6 +7,11 @@ if [ "${PLUGIN_VERSION}" != 'master' ]; then export PLUGIN_VERSION=stable/${PLUG
 . /var/lib/openstack/bin/activate; \
 /var/lib/openstack/bin/pip install git+https://github.com/openstack/oslo.db@${PLUGIN_VERSION}#egg=oslo_db
 
+RUN . /var/lib/openstack/bin/activate; \
+    /var/lib/openstack/bin/pip install git+https://github.com/openstack/blazar-nova.git
+
+ENV PYTHONPATH="/var/lib/openstack/lib/python3.10/site-packages"
+
 FROM openstackhelm/nova:${VERSION}
 COPY --from=build /var/lib/openstack/. /var/lib/openstack/
 # Packages for the following features:

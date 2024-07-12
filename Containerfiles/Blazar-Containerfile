@@ -1,0 +1,32 @@
+FROM --platform=linux/amd64 ubuntu:jammy
+
+ENV BLAZAR_HOME=/opt/
+
+RUN apt-get update && apt-get install -y git build-essential libssl-dev libffi-dev \
+                                         libxml2-dev libxslt1-dev libpq-dev \
+                                         libmysqlclient-dev python3 python3-pip curl \
+                                         vim python3-openstackclient; \
+    rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install pymysql
+
+RUN pip3 install --no-cache-dir --upgrade urllib3 chardet
+
+RUN pip3 install tox
+
+RUN mkdir -p $BLAZAR_HOME
+WORKDIR $BLAZAR_HOME
+
+# Clone Blazar related repositories
+RUN git clone -b stable/2024.1 https://opendev.org/openstack/blazar.git && \
+    git clone -b stable/2024.1 https://opendev.org/openstack/python-blazarclient.git
+
+# Install dependencies and projects
+RUN pip3 install --no-cache-dir ./blazar && \
+    pip3 install --no-cache-dir ./python-blazarclient && \
+    if [ ! -e /usr/local/bin/blazar-api ]; then \
+        ln -s /opt/blazar/bin/blazar-api /usr/local/bin/blazar-api; \
+    fi && \
+    if [ ! -e /usr/local/bin/blazar-manager ]; then \
+        ln -s /opt/blazar/bin/blazar-manager /usr/local/bin/blazar-manager; \
+    fi

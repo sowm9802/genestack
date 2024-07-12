@@ -1357,6 +1357,10 @@ conf:
     - api_database
     - cell0_database
   nova:
+    filter_scheduler:
+      enabled_filters: BlazarFilter
+      available_filters: nova.scheduler.filters.all_filters
+      available_filters: blazarnova.scheduler.filters.blazar_filter.BlazarFilter
     DEFAULT:
       # NOTE(cloudnull): the vif_plugging_* options are an implemntation detail of the nova container when running with OVN
       vif_plugging_is_fatal: true
@@ -1436,7 +1440,7 @@ conf:
       rbd_secret_uuid: 457eb676-33da-42ec-9a8c-9293d545c337
       disk_cachemodes: "network=writeback"
       hw_disk_discard: unmap
-      cpu_mode: host-model
+      cpu_mode: host-passthrough
       volume_use_multipath: false  # Disabled because multipathd is not configured or running
     upgrade_levels:
       compute: auto

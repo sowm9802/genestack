@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: blazar
+  namespace: openstack
+spec:
+  selector:
+    app: ingress-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+    - name: https
+      port: 443
+      targetPort: 443
+  sessionAffinity: None
+  type: ClusterIP
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: blazar-api
+  namespace: openstack
+spec:
+  selector:
+    application: blazar
+    component: api
+    release_group: blazar
+  ports:
+    - name: b-api
+      port: 1234
+      targetPort: 1234
+  sessionAffinity: None
+  type: ClusterIP
+

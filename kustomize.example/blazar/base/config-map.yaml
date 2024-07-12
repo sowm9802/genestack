@@ -1,0 +1,108 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: blazar-configmap
+  namespace: openstack
+data:
+  blazar-conf-setup.sh: |
+    #!/bin/bash
+    cd /opt/blazar/
+    tox -egenconfig
+    mv etc/blazar/blazar.conf.sample etc/blazar/blazar.conf
+    sed -i '/^\[keystone_authtoken\]/a \
+    auth_url = '"${OS_AUTH_URL}"'\n\
+    auth_uri = '"${OS_AUTH_URL}"'\n\
+    www_authenticate_uri = '"${OS_AUTH_URL}"'\n\
+    username = '"${SERVICE_USERNAME}"'\n\
+    password = '"${SERVICE_PASSWORD}"'\n\
+    user_domain_name = '"${SERVICE_DOMAIN}"'\n\
+    project_name = '"${SERVICE_PROJECT}"'\n\
+    project_domain_name = '"${SERVICE_PROJECT_DOMAIN}"'\n\
+    ' etc/blazar/blazar.conf
+
+    declare -a sed_commands=(
+        "s/^#*auth_type = .*/auth_type = password/"
+        "s/^#*auth_version = .*/auth_version = v${OS_IDENTITY_API_VERSION}/"
+        "s/^#*service_token_roles_required = .*/service_token_roles_required = true/"
+        "s/^#*service_token_roles = .*/service_token_roles = service/"
+        "s/^#*service_type = .*/service_type = reservation/"
+        "s/^#*region_name = .*/region_name = ${OS_REGION_NAME}/"
+        "s/^#*port = .*/port = 1234/"
+        "s/^#\(host = .*\)/\1/"
+        "s/^#*os_auth_host = .*/os_auth_host = keystone-api.openstack.svc.cluster.local/"
+        "s/^#*os_auth_port = .*/os_auth_port = 5000/"
+        "s/^#*os_auth_protocol = .*/os_auth_protocol = http/"
+        "s/^#*os_auth_version = .*/os_auth_version = v${OS_IDENTITY_API_VERSION}/"
+        "s/^#*os_admin_username = .*/os_admin_username = ${SERVICE_USERNAME}/"
+        "s/^#*os_admin_password = .*/os_admin_password = ${SERVICE_PASSWORD}/"
+        "s/^#*os_admin_project_name = .*/os_admin_project_name = ${SERVICE_PROJECT}/"
+        "s/^#*os_region_name = .*/os_region_name = ${OS_REGION_NAME}/"
+        "s/^#*os_admin_project_domain_name = .*/os_admin_project_domain_name = ${SERVICE_PROJECT_DOMAIN}/"
+        "s/^#*os_admin_user_domain_name = .*/os_admin_user_domain_name = ${SERVICE_DOMAIN}/"
+        "s|^#*transport_url = .*|transport_url = rabbit://${RABBIT_USERNAME}:${RABBIT_PASSWORD}@rabbitmq-server-0.rabbitmq-nodes.openstack.svc.cluster.local:5672,${RABBIT_USERNAME}:${RABBIT_PASSWORD}@rabbitmq-server-1.rabbitmq-nodes.openstack.svc.cluster.local:5672,${RABBIT_USERNAME}:${RABBIT_PASSWORD}@rabbitmq-server-2.rabbitmq-nodes.openstack.svc.cluster.local:5672/blazar|"
+        "s|^#*connection = .*|connection = mysql+pymysql://${DB_USERNAME}:${DB_PASSWORD}@${DB_ENDPOINT}:3306/blazar|"
+        "s|^#*slave_connection = .*|slave_connection = mysql+pymysql://${DB_USERNAME}:${DB_PASSWORD}@mariadb-cluster-secondary.openstack.svc.cluster.local:3306/blazar|"
+        "s/^#*max_retries = .*/max_retries = -1/"
+        "s/^#*max_pool_size = .*/max_pool_size = 20/"
+        "s/^#*max_overflow = .*/max_overflow = 0/"
+        "s/^#*plugins = .*/plugins = physical.host.plugin,virtual.instance.plugin/"
+        "s/^#*rpc_topic = .*/rpc_topic = blazar.manager/"
+        "s/^#*enable_proxy_headers_parsing = .*/enable_proxy_headers_parsing = true/"
+        "s/^#*rabbit_ha_queues = .*/rabbit_ha_queues = true/"
+        "s/^#driver = .*/driver = messagingv2/"
+        "s/^#*enable_v1_api = .*/enable_v1_api = false/"
+    )
+
+    for cmd in "${sed_commands[@]}"; do
+       sed -i "$cmd" etc/blazar/blazar.conf
+    done
+
+  blazar-resource-create.sh: |
+    #!/bin/bash
+
+    if openstack user list --project "service" --domain "service" | grep -q "\b${SERVICE_USERNAME}\b"; then
+      USER_ID=$(openstack user list --project "service" --domain "service" --long | grep "\b${SERVICE_USERNAME}\b" | awk '{print $2}')
+    else
+      USER_ID=$(openstack user create --project "service" --password "${SERVICE_PASSWORD}" --domain "service" --description "Service User for RegionOne/service/blazar" "${SERVICE_USERNAME}" -f value -c id)
+    fi
+
+    service_exists() {
+      openstack service show blazar >/dev/null 2>&1
+    }
+
+    if ! service_exists "blazar"; then
+     openstack service create --name "blazar" --description "OpenStack Reservation Service" reservation
+    fi
+    SERVICE_ID=$(openstack service show -f value -c id blazar)
+
+
+    openstack role add --project "service" --user "${USER_ID}" admin
+    openstack aggregate show freepool >/dev/null 2>&1 || openstack aggregate create freepool
+
+    for endpoint_type in internal admin public; do
+      if ! openstack endpoint list --service "$SERVICE_ID" --interface "$endpoint_type" | grep -q "blazar"; then
+        case "$endpoint_type" in
+            internal | admin)
+                openstack endpoint create --region "$OS_REGION_NAME" "$SERVICE_ID" "$endpoint_type" "http://blazar-api.openstack.svc.cluster.local:1234/"
+                ;;
+            public)
+                openstack endpoint create --region "$OS_REGION_NAME" "$SERVICE_ID" "$endpoint_type" "http://blazar.openstack.svc.cluster.local/"
+                ;;
+        esac
+      fi
+    done
+
+  blazar-db-migrate.sh: |
+    #!/bin/bash
+    cd /opt/
+    pip install SQLAlchemy==1.4.*
+    blazar-db-manage --config-file /opt/blazar/etc/blazar/blazar.conf upgrade head
+
+  blazar-service-init.sh: |
+    #!/bin/bash
+    while true; do
+      /usr/local/bin/blazar-api --config-file /opt/blazar/etc/blazar/blazar.conf &
+      /usr/local/bin/blazar-manager --config-file /opt/blazar/etc/blazar/blazar.conf &
+      wait
+      sleep 10  # Adjust as needed
+    done
