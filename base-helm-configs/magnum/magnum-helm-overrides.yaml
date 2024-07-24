@@ -97,10 +97,12 @@ conf:
       max_retries: -1
     trust:
       trustee_domain_name: magnum
-      cluster_user_trust: false
-      trustee_keystone_interface: public
-      trustee_keystone_region_name: RegionOne
+      #cluster_user_trust: false
+      #trustee_keystone_interface: public
+      #trustee_keystone_region_name: RegionOne
     keystone_authtoken:
+      service_token_roles: service
+      service_token_roles_required: true
       auth_type: password
       auth_version: v3
       memcache_security_strategy: ENCRYPT
@@ -372,8 +374,10 @@ endpoints:
       default: http
     port:
       api:
-        default: 80
+        default: 5000
+        public: 80
         internal: 5000
+        service: 5000
   container_infra:
     name: magnum
     hosts:
