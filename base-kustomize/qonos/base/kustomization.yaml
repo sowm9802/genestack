@@ -1,0 +1,11 @@
+sortOptions:
+  order: fifo
+resources:
+  - qonos-rbac.yaml
+  - qonos-mariadb-database.yaml
+  - qonos-rabbitmq-queue.yaml
+  - qonos-bin-configmap.yaml
+  - qonos-ks-user-job.yaml
+  - api-deployment.yaml
+  - scheduler-deployment.yaml
+  - worker-deployment.yaml
